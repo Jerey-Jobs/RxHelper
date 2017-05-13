@@ -3,6 +3,7 @@ package com.jerey.asyncutil;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
 
 import com.jerey.asynclib.AsyncHelper;
 import com.jerey.asynclib.Callback;
@@ -11,13 +12,23 @@ import com.jerey.asynclib.ProgressCallable;
 
 import java.util.concurrent.Callable;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity
+        implements View.OnClickListener {
     public static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        findViewById(R.id.test1).setOnClickListener(this);
+        findViewById(R.id.test2).setOnClickListener(this);
+        findViewById(R.id.test3).setOnClickListener(this);
+    }
+
+    /**
+     * 测试普通异步
+     */
+    private void testAsync() {
         AsyncHelper.callable(new Callable<String>() {
             @Override
             public String call() throws Exception {
@@ -31,8 +42,12 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, " onCallback " + pCallbackValue);
             }
         }).execute();
+    }
 
-
+    /**
+     * 测试处理时带dialog
+     */
+    private void testDialog() {
         AsyncHelper.callable(new Callable<Integer>() {
             @Override
             public Integer call() throws Exception {
@@ -50,7 +65,12 @@ public class MainActivity extends AppCompatActivity {
         }).setCancelable(true)
                 .setDialogMode(MainActivity.this, "测试", "this is a test")
                 .execute();
+    }
 
+    /**
+     * 测试进度条
+     */
+    private void testProgress() {
         AsyncHelper.doProgressAsync(MainActivity.this, R.string.app_name, new
                         ProgressCallable<String>() {
                             @Override
@@ -76,5 +96,20 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
         );
+    }
+
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()) {
+            case R.id.test1:
+                testAsync();
+                break;
+            case R.id.test2:
+                testDialog();
+                break;
+            case R.id.test3:
+                testProgress();
+                break;
+        }
     }
 }

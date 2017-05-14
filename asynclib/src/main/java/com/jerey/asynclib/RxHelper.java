@@ -6,49 +6,53 @@ import android.content.DialogInterface;
 import android.os.AsyncTask;
 import android.util.Log;
 
-import java.util.concurrent.Callable;
-
 /**
  * 这是一个异步帮助类, 实现是用的AsyncTask, 不过我不喜欢Async的调用方式, 因此封装成了此类的链式调用方式.<br>
  * 不过,若你工程中有RxJava,那也没这类什么事情了.可惜公司代码不用RxJava啊.
  * <p>
+ * Q:RxHelper是什么:
+ * A:RxHelper是一个帮助Android异步的类.由于不喜AsyncTask的写法,进行了二次封装.
+ * 将其修改成了时下最流行的观察者模式的提交方式. Subsciber将会在子线程运行,Observer在主线程"观察"结果.
+ * <p>
  * // demo代码:
- * //        AsyncHelper.callable(new Callable<String>() {   //子线程执行
+ * //        RxHelper.fromSubsciber(new Subscriber<String>() {     //子线程执行
  * //            @Override
  * //            public String call() throws Exception {
- * //                Log.w("xiamin call", "thread id" + Thread.currentThread().getId());
+ * //                Log.w(TAG, "call" + "thread id" + Thread.currentThread().getId());
  * //                return "hello world";
  * //            }
- * //        }).callback(new Callback<String>() {            //回调UI线程执行
+ * //        }).subscribe(new Observer<String>() {                 //UI回调
  * //            @Override
- * //            public void onCallback(String pCallbackValue) {
- * //                Log.i("xiamin onCallback", "thread id" + Thread.currentThread().getId());
- * //                Log.i("xiamin onCallback", pCallbackValue);
+ * //            public void onObserve(String callbackValue) {
+ * //
  * //            }
- * //        }).execute();                                    // 执行
+ * //
+ * //            @Override
+ * //            public void onError(Exception e) {
+ * //
+ * //            }
+ * //        });
  * </p>
  */
-public class AsyncHelper {
+public class RxHelper {
     private static final String TAG = "AsyncHelper";
 
     /**
      * 有处理进度条的AsnycTask
      *
-     * @param pContext           进度dialog持有的context对象
-     * @param pTitle             进度dialog标题
+     * @param pContext    进度dialog持有的context对象
+     * @param pTitle      进度dialog标题
      * @param pMessage
-     * @param pCallable
-     * @param pCallback
-     * @param pExceptionCallback
+     * @param pSubscriber
+     * @param pObserver
      * @param pCancelable
      * @param <T>
      */
     public static <T> void doAsyncWithProgress(final Context pContext,
                                                final CharSequence pTitle,
                                                final CharSequence pMessage,
-                                               final Callable<T> pCallable,
-                                               final Callback<T> pCallback,
-                                               final Callback<Exception> pExceptionCallback,
+                                               final Subscriber<T> pSubscriber,
+                                               final Observer<T> pObserver,
                                                final boolean pCancelable) {
         new AsyncTask<Void, Void, T>() {
             private ProgressDialog mPD;
@@ -62,8 +66,8 @@ public class AsyncHelper {
                     this.mPD.setOnCancelListener(new DialogInterface.OnCancelListener() {
                         @Override
                         public void onCancel(final DialogInterface pDialogInterface) {
-                            if (pExceptionCallback != null) {
-                                pExceptionCallback.onCallback(new CancelledException());
+                            if (pObserver != null) {
+                                pObserver.onError(new CancelledException());
                             }
                             pDialogInterface.dismiss();
                         }
@@ -75,7 +79,7 @@ public class AsyncHelper {
             @Override
             public T doInBackground(final Void... params) {
                 try {
-                    return pCallable.call();
+                    return pSubscriber.call();
                 } catch (final Exception e) {
                     this.mException = e;
                 }
@@ -93,13 +97,13 @@ public class AsyncHelper {
                     this.mException = new CancelledException();
                 }
                 if (this.mException == null) {
-                    pCallback.onCallback(result);
+                    pObserver.onObserve(result);
                 } else {
-                    if (pExceptionCallback == null) {
+                    if (pObserver == null) {
                         if (this.mException != null)
                             Log.e("Error", this.mException.toString());
                     } else {
-                        pExceptionCallback.onCallback(this.mException);
+                        pObserver.onError(this.mException);
                     }
                 }
                 super.onPostExecute(result);
@@ -113,14 +117,12 @@ public class AsyncHelper {
      * @param pTitleResID
      * @param pCallable
      * @param pCallback
-     * @param pExceptionCallback
      * @param <T>
      */
     public static <T> void doProgressAsync(final Context pContext,
                                            final int pTitleResID,
-                                           final ProgressCallable<T> pCallable,
-                                           final Callback<T> pCallback,
-                                           final Callback<Exception> pExceptionCallback) {
+                                           final ProgressSubscriber<T> pCallable,
+                                           final Observer<T> pCallback) {
         new AsyncTask<Void, Integer, T>() {
             private ProgressDialog mPD;
             private Exception mException = null;
@@ -168,12 +170,12 @@ public class AsyncHelper {
                     this.mException = new CancelledException();
                 }
                 if (this.mException == null) {
-                    pCallback.onCallback(result);
+                    pCallback.onObserve(result);
                 } else {
-                    if (pExceptionCallback == null) {
+                    if (pCallback == null) {
                         Log.e("Error", this.mException.getLocalizedMessage());
                     } else {
-                        pExceptionCallback.onCallback(this.mException);
+                        pCallback.onError(this.mException);
                     }
                 }
                 super.onPostExecute(result);
@@ -184,17 +186,14 @@ public class AsyncHelper {
 
     /**
      * 最简单的回调.实现链式调用的效果
-     *
-     * @param callable
-     * @param callback
-     * @param <T>
      */
-    public static <T> void doAsync(final Callable<T> callable, final Callback<T> callback) {
-        new AsyncTask<Void, Void, T>() {
+    public static <T> void doAsync(final Subscriber<T> subscriber,
+                                   final Observer<T> callback) {
+        new AsyncTask<Object, Object, T>() {
             @Override
-            protected T doInBackground(Void... params) {
+            protected T doInBackground(Object... params) {
                 try {
-                    return callable.call();
+                    return subscriber.call();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -202,9 +201,9 @@ public class AsyncHelper {
             }
 
             @Override
-            protected void onPostExecute(T t) {
-                super.onPostExecute(t);
-                callback.onCallback(t);
+            protected void onPostExecute(T r) {
+                super.onPostExecute(r);
+                callback.onObserve(r);
             }
         }.execute((Void[]) null);
     }
@@ -212,23 +211,26 @@ public class AsyncHelper {
     /**
      * 子线程执行部分
      *
-     * @param callable
+     * @param subscriber
      * @param <T>
      * @return
      */
-    public static <T> AsyncBuilder<T> callable(final Callable<T> callable) {
-        return new AsyncBuilder<T>(callable);
+    public static <T> AsyncBuilder<T> fromSubsciber(final Subscriber<T> subscriber) {
+        return new AsyncBuilder<T>(subscriber);
     }
 
 
-    public static class AsyncBuilder<T> {
-        private Callable<T> callable;
-        private Callback<T> callback;
+    public static class AsyncBuilder<T extends Object> {
+        private Subscriber<T> subscriber;
         private Context context;
         private String title;
         private String hintMessage;
-        private Callback<Exception> exceptionCallback = null;
         private boolean cancelable = false;
+
+
+        public AsyncBuilder(Subscriber<T> subscriber) {
+            this.subscriber = subscriber;
+        }
 
         /**
          * 设置有进度界面显示模式
@@ -246,17 +248,6 @@ public class AsyncHelper {
         }
 
         /**
-         * 在发生用户点击取消时或者其他异常时的异常回调
-         *
-         * @param exceptionCallback
-         * @return回调
-         */
-        public AsyncBuilder<T> setExceptionCallback(Callback<Exception> exceptionCallback) {
-            this.exceptionCallback = exceptionCallback;
-            return this;
-        }
-
-        /**
          * 设置进度dialog是否可以点击其他地方时自动消失,默认为false, 若设置了, 同时设置了异常回调时, 异常回调将会被回调
          *
          * @param cancelable
@@ -267,50 +258,32 @@ public class AsyncHelper {
             return this;
         }
 
-        /**
-         * 子线程代码
-         *
-         * @param callable
-         * @return
-         */
-        public AsyncBuilder<T> callable(Callable<T> callable) {
-            this.callable = callable;
-            return this;
-        }
-
-        /**
-         * 主线程回调
-         *
-         * @param callback
-         * @return
-         */
-        public AsyncBuilder<T> callback(Callback<T> callback) {
-            this.callback = callback;
-            return this;
-        }
-
-        public AsyncBuilder(Callable<T> callable) {
-            this.callable = callable;
-        }
-
-        public AsyncBuilder() {
-        }
+//        /**
+//         * 子线程代码
+//         *
+//         * @param subscriber
+//         * @return
+//         */
+//        public AsyncBuilder<T> subscribe(Subscriber<T> subscriber) {
+//            this.subscriber = subscriber;
+//            return this;
+//        }
 
         /**
          * 执行,callable将会在一个线程池执行, callback将会在主线程回调.
-         *
-         * @param <T>
          */
-        public <T> void execute() {
+        public AsyncBuilder<T> subscribe(Observer<T> observer) {
             if (context == null) {
-                AsyncHelper.doAsync(callable, callback);
+                RxHelper.doAsync(subscriber, observer);
             } else if (context != null && title != null) {
                 doAsyncWithProgress(context,
-                        title, hintMessage, callable,
-                        callback, exceptionCallback,
-                        cancelable
-                );
+                        title,
+                        hintMessage,
+                        subscriber,
+                        observer,
+                        cancelable);
             }
+            return this;
         }
 
     }

@@ -38,7 +38,8 @@ public class MainActivity extends AppCompatActivity
         }).subscribe(new Observer<String>() {
             @Override
             public void onObserve(String callbackValue) {
-
+                Log.w(TAG, "onObserve" + "thread id" + Thread.currentThread().getId());
+                Log.w(TAG, "onObserve msg: " + callbackValue);
             }
 
             @Override
@@ -74,7 +75,8 @@ public class MainActivity extends AppCompatActivity
 
                     @Override
                     public void onError(Exception e) {
-
+                        Log.e(TAG, "onError");
+                        e.printStackTrace();
                     }
                 });
 
